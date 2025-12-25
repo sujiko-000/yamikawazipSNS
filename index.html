@@ -1,10 +1,245 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>my site</title>
+<meta charset="UTF-8" />
+<title>病みかわSNS</title>
+<style>
+:root{
+  --bg:#f7eef5;
+  --main:#d9d4e2;
+  --card:#ffffff;
+  --border:#c7bdd6;
+  --accent:#cfa7dd;
+  --text:#5e5670;
+}
+body.yamikawa{
+  --bg:#120a1a;
+  --main:#1e1628;
+  --card:#241b31;
+  --border:#3a274a;
+  --accent:#d88cff;
+  --text:#f2e9f7;
+}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:"Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+}
+
+/* ===== ヘッダー（高さ固定） ===== */
+header{
+  height:56px;           /* ← 固定 */
+  display:flex;
+  justify-content:center;
+  gap:80px;
+  align-items:center;
+  border-bottom:1px solid var(--border);
+  background:rgba(255,255,255,0.8);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+header span{cursor:pointer;opacity:.7}
+header span.active{opacity:1;font-weight:600}
+
+.layout{
+  display:grid;
+  grid-template-columns:1fr 420px 1fr;
+}
+
+main{
+  background:var(--main);
+  border-left:1px solid var(--border);
+  border-right:1px solid var(--border);
+  min-height:calc(100vh - 56px); /* ヘッダー分引く */
+}
+
+.post{
+  border-bottom:1px solid var(--border);
+  padding:14px;
+}
+.post img{
+  max-width:100%;
+  border-radius:12px;
+  margin-top:8px;
+}
+
+.actions{
+  display:flex;
+  gap:16px;
+  margin-top:6px;
+  font-size:14px;
+}
+.actions span{cursor:pointer}
+
+.hashtag{color:var(--accent);cursor:pointer}
+
+/* ===== 固定投稿欄 ===== */
+.composer{
+  position:fixed;
+  bottom:0;
+  left:50%;
+  transform:translateX(-50%);
+  width:420px;
+  background:var(--card);
+  border-radius:20px 20px 0 0;
+  padding:10px;
+  border:1px solid var(--border);
+}
+.composer textarea{
+  width:100%;
+  border:none;
+  resize:none;
+  outline:none;
+  background:transparent;
+  color:var(--text);
+}
+.composer input{display:none}
+.composer button{
+  float:right;
+  background:var(--accent);
+  border:none;
+  color:#fff;
+  border-radius:999px;
+  padding:6px 14px;
+  cursor:pointer;
+}
+
+.side{
+  padding:20px;
+}
+.clock,.account{
+  background:var(--card);
+  border-radius:20px;
+  padding:20px;
+  text-align:center;
+  border:1px solid var(--border);
+}
+
+.searchBox{
+  padding:14px;
+  border-bottom:1px solid var(--border);
+}
+.searchBox input{
+  width:100%;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid var(--border);
+}
+</style>
 </head>
 <body>
-    <h1>サイト公開テスト中！</h1>
-    <p>無事に表示されるかな？</p>
+<header>
+  <span onclick="setMode('home')" id="tab-home">ホーム</span>
+  <span onclick="setMode('likes')" id="tab-likes">いいね欄</span>
+  <span onclick="setMode('search')" id="tab-search">検索</span>
+</header>
+
+<div class="layout">
+  <div class="side">
+    <div class="clock" id="clock"></div>
+  </div>
+
+  <main>
+    <div id="searchArea" class="searchBox" style="display:none">
+      <input id="searchInput" placeholder="#タグを検索" oninput="searchTag()" />
+    </div>
+    <div id="timeline"></div>
+  </main>
+
+  <div class="side">
+    <div class="account">アカウント情報<br><br>海寝ゆら<br>@umine_yura</div>
+  </div>
+</div>
+
+<div class="composer">
+  <textarea id="text" rows="2" placeholder="いまどうしてる？"></textarea>
+  <label for="img">📷</label>
+  <input type="file" id="img" accept="image/*" />
+  <button onclick="addPost()">✎</button>
+</div>
+
+<script>
+let posts = JSON.parse(localStorage.getItem('posts'))||[];
+let mode='home';
+let searchWord='';
+
+function save(){localStorage.setItem('posts',JSON.stringify(posts));}
+
+function parse(text){
+  return text.replace(/#(\w+)/g,'<span class="hashtag" onclick="filterTag(\'$1\')">#$1</span>');
+}
+
+function addPost(){
+  const t=text.value.trim();
+  if(!t && !img.files[0])return;
+
+  const reader = img.files[0] ? new FileReader() : null;
+
+  if(reader){
+    reader.onload = () => finishPost(reader.result);
+    reader.readAsDataURL(img.files[0]);
+  } else finishPost(null);
+}
+
+function finishPost(image){
+  posts.unshift({
+    id:Date.now(),
+    text:text.value,
+    image,
+    likes:0,
+    liked:false
+  });
+  text.value=''; img.value='';
+  save(); render();
+}
+
+function toggleLike(id){
+  const p=posts.find(p=>p.id===id);
+  p.liked=!p.liked;
+  p.likes+=p.liked?1:-1;
+  save(); render();
+}
+
+function delPost(id){posts=posts.filter(p=>p.id!==id);save();render();}
+
+function setMode(m){
+  mode=m; searchWord='';
+  searchArea.style.display = m==='search'?'block':'none';
+  document.querySelectorAll('header span').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+m)?.classList.add('active');
+  render();
+}
+
+function filterTag(tag){mode='tag';searchWord=tag;render();}
+function searchTag(){searchWord=searchInput.value.replace('#','');render();}
+
+function render(){
+  timeline.innerHTML='';
+  let list=posts;
+  if(mode==='likes')list=posts.filter(p=>p.liked);
+  if(mode==='tag' || mode==='search')list=posts.filter(p=>p.text.includes('#'+searchWord));
+
+  list.forEach(p=>{
+    timeline.innerHTML+=`
+      <div class="post">
+        <div>${parse(p.text)}</div>
+        ${p.image?`<img src="${p.image}">`:''}
+        <div class="actions">
+          <span onclick="toggleLike(${p.id})">♡ ${p.likes}</span>
+          <span onclick="delPost(${p.id})">🗑</span>
+        </div>
+      </div>`;
+  });
+}
+
+function updateClock(){
+  const d=new Date();
+  clock.innerHTML=`${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}<br>${d.toLocaleDateString()}`;
+}
+setInterval(updateClock,1000);updateClock();
+setMode('home');
+</script>
 </body>
 </html>
